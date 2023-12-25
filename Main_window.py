@@ -1,8 +1,7 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtWidgets import QAbstractItemView,QMessageBox
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QStandardItemModel,QStandardItem
-from PyQt5.QtGui import QStandardItemModel, QStandardItem, QBrush, QColor
+from PyQt5.QtCore import Qt, QObject, pyqtSignal
+from PyQt5.QtGui import QStandardItemModel,QStandardItem, QBrush, QColor
 from About_kadrovic import Ui_About_kadrovik
 from datebase import *
 import datetime
@@ -132,10 +131,7 @@ class Ui_MainWindow(object):
         QtCore.QMetaObject.connectSlotsByName(MainWindow)
 
         self.pushButton_2.clicked.connect(self.show_exit_dialog)
-
-        '''self.id_officer = id_officer'''
         self.pushButton.clicked.connect(lambda: self.openAboutWindow())
-
         self.pushButton_5.clicked.connect(lambda: self.openVacanciesForm(MainWindow))
         self.pushButton_4.clicked.connect(lambda: self.openEmployersForm(MainWindow))
         self.pushButton_3.clicked.connect(lambda: self.openApplicantsForm(MainWindow))
@@ -161,7 +157,6 @@ class Ui_MainWindow(object):
         self.window.show()
         MainWindow.close()
 
-
     def show_exit_dialog(self):
         msg = QtWidgets.QMessageBox()
         msg.setWindowTitle("Выход из системы")
@@ -176,7 +171,6 @@ class Ui_MainWindow(object):
         if i.text() == "Нет":
             QtWidgets.qApp.activeModalWidget().close()
 
-
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
         MainWindow.setWindowTitle(_translate("MainWindow", "Кадровое агентство"))
@@ -187,14 +181,12 @@ class Ui_MainWindow(object):
         self.label_4.setText(_translate("MainWindow", "Сведения о кадровике"))
         self.label_5.setText(_translate("MainWindow", "Выход"))
 
-
     def openAboutWindow(self):
         # Метод для открытия формы Вход в систему
         self.window = QtWidgets.QMainWindow()
         self.ui = Ui_About_kadrovik()
         self.ui.setupUi(self.window)  # Передача user_id в метод setupUi
         self.window.show()
-
 
 class Ui_VacWindow(object):
     def setupUi(self, VacWindow):
@@ -630,7 +622,7 @@ class Ui_VacWindow(object):
         elements.append(title)
         elements.append(Spacer(1, 0.5*inch))  # Создание промежутка в 0.5 дюйма после первой таблицы
 
-        with open('account.txt', 'r') as file:
+        with open('Pictures/account.txt', 'r') as file:
             id_officer = file.read()
         sql_query = "SELECT * FROM users WHERE id_officer = %s"
         cursor.execute(sql_query, (id_officer,))
@@ -1145,7 +1137,7 @@ class Ui_SoiscWindow(object):
         total_applicants = len(applicants_by_status)
         data.append(['', '', '', '', '', '', f'Всего соискателей: {total_applicants}'])
         elements.append(Spacer(1, 0.5*inch))  # Создание промежутка в 0.5 дюйма после первой таблицы
-        with open('account.txt', 'r') as file:
+        with open('Pictures/account.txt', 'r') as file:
             id_officer = file.read()
         with connection.cursor(pymysql.cursors.DictCursor) as cursor:
             sql_query = "SELECT * FROM users WHERE id_officer = %s"
@@ -1901,7 +1893,8 @@ class Ui_Vac_loading(object):
 
         self.fill_employer_combobox()
 
-    def fill_employer_combobox(self):
+    def fill_employer_combobox(self, selected_employer_id=None):
+
         cursor = connection.cursor()
         sql_query = "SELECT id, name FROM Employer"  # Query to retrieve employer id and names
         cursor.execute(sql_query)  # Execute the query
@@ -1917,8 +1910,11 @@ class Ui_Vac_loading(object):
             employer_name = row['name']
             self.comboBox.addItem(f"{employer_id} - {employer_name}")  # Adding both id and name together as an item
 
-
-
+            # Select the corresponding employer in the combobox
+            if employer_id == selected_employer_id:
+                index = self.comboBox.findText(f"{employer_id} - {employer_name}", QtCore.Qt.MatchFixedString)
+                if index >= 0:
+                    self.comboBox.setCurrentIndex(index)
 
     def showFields(self):
         self.RabotNameEdit.setHidden(False)
@@ -1993,15 +1989,23 @@ class Ui_Vac_loading(object):
             # Создание SQL-запроса для добавления данных в таблицу "Employer"
             sql_query = "INSERT INTO Employer (Name, Adress, Telephone, Mail, Surname_person, Name_person, date_start) VALUES (%s, %s, %s, %s, %s, %s, %s)"
             cursor.execute(sql_query, (rabot_name, address, phone_number, email, responsible_surname, responsible_name, date_start))
+            
+            # Получение ID нового работодателя
+            new_employer_id = cursor.lastrowid
 
             # Выполнение коммита, чтобы сохранить изменения
             connection.commit()
+
+            # Обновление comboBox после добавления нового работодателя
+            self.fill_employer_combobox(new_employer_id)
+            self.showCombo()
         else:
             msg = QtWidgets.QMessageBox()
             msg.setWindowTitle("Предупреждение")
             msg.setText("Пожалуйста, заполните все поля для ввода")
             msg.addButton(QtWidgets.QMessageBox.Ok)
             msg.exec_()
+
 
 
     def saveVacancyData(self):
@@ -2032,9 +2036,6 @@ class Ui_Vac_loading(object):
             msg.setText("Пожалуйста, заполните все поля для ввода")
             msg.addButton(QtWidgets.QMessageBox.Ok)
             msg.exec_()
-
-
-
 
 
     def clearFields(self):
@@ -2317,7 +2318,6 @@ class Ui_EditVacWindow(object):
         self.ClearButton.clicked.connect(self.clearFields)
         self.ClearVac_Button.clicked.connect(self.clear_applicant)
         
-        
         self.AddSois.clicked.connect(self.showFields)
         self.ChooseSoisBtn.clicked.connect(self.showCombo)
 
@@ -2344,48 +2344,38 @@ class Ui_EditVacWindow(object):
             if index >= 0:
                 self.Status.setCurrentIndex(index)
             else:
-                # Handle the case where the status is not found in the ComboBox
-                # For example, show a default option or display an error message to the user
                 self.Status.setCurrentIndex(0)
         else:
-            # Handle the case where no vacancy is found for the given ID
-            # For example, clear the input fields or show an error message to the user
             self.VacTitleEdit.setText("")
             self.SalaryEdit.setText("")
             self.ExperienceEdit.setText("")
             self.AdressEdit.setText("")
             self.Level_educationEdit.setText("")
             self.skillsEdit.setText("")
-            self.Status.setCurrentIndex(0)  # Assuming index 0 represents a default/empty status
+            self.Status.setCurrentIndex(0)
 
         self.fill_employer_combobox(vacancy_info['employer'])
         self.SaveButton.clicked.connect(self.saveEmployerData)
-        self.publishButton.clicked.connect(lambda: self.saveVacancyData(vacancy_id,vacancy_info['employer'], EditVacWindow))
+        self.publishButton.clicked.connect(lambda: self.saveVacancyData(vacancy_id, vacancy_info['employer'], EditVacWindow))
 
     def fill_employer_combobox(self, selected_employer_id):
         cursor = connection.cursor()
-        sql_query = "SELECT id, name FROM Employer"  # Query to retrieve employer id and names
-        cursor.execute(sql_query)  # Execute the query
-        result_set = cursor.fetchall()  # Retrieve the query result
+        sql_query = "SELECT id, name FROM Employer"
+        cursor.execute(sql_query) 
+        result_set = cursor.fetchall() 
         connection.commit()
 
-        # Clear the combobox to avoid duplicate entries
         self.comboBox.clear()
 
-        # Add employer id and names to the combobox
         for row in result_set:
             employer_id = row['id']
             employer_name = row['name']
-            self.comboBox.addItem(f"{employer_id} - {employer_name}")  # Adding both id and name together as an item
+            self.comboBox.addItem(f"{employer_id} - {employer_name}") 
 
-            # Select the corresponding employer in the combobox
             if employer_id == selected_employer_id:
                 index = self.comboBox.findText(f"{employer_id} - {employer_name}", QtCore.Qt.MatchFixedString)
                 if index >= 0:
                     self.comboBox.setCurrentIndex(index)
-
-
-
 
     def showFields(self):
         self.RabotNameEdit.setHidden(False)
@@ -2425,7 +2415,6 @@ class Ui_EditVacWindow(object):
     def saveEmployerData(self):
         if (self.RabotNameEdit.text() and self.AdressRabEdit.text() and self.PhoneNumberEdit.text() 
         and self.MailEdit.text() and self.Surname_edit.text() and self.Name_edit.text()):
-
             # Получение введенных пользователем данных
             rabot_name = self.RabotNameEdit.text()
             address = self.AdressRabEdit.text()
@@ -2433,21 +2422,20 @@ class Ui_EditVacWindow(object):
             email = self.MailEdit.text()
             responsible_surname = self.Surname_edit.text()
             responsible_name = self.Name_edit.text()
-
             # Получение текущей даты
             date_start = datetime.datetime.now().date()
-
             # Подключение к базе данных
             cursor = connection.cursor()
-
             # Создание SQL-запроса для добавления данных в таблицу "Employer"
             sql_query = "INSERT INTO Employer (Name, Adress, Telephone, Mail, Surname_person, Name_person, date_start) VALUES (%s, %s, %s, %s, %s, %s, %s)"
-            cursor.execute(sql_query, (rabot_name, address, phone_number, email, responsible_surname, responsible_name, date_start))
-
+            cursor.execute(sql_query, (rabot_name, address, phone_number, email, responsible_surname, responsible_name, date_start))   
+            # Получение ID нового работодателя
+            new_employer_id = cursor.lastrowid
             # Выполнение коммита, чтобы сохранить изменения
             connection.commit()
-
-
+            # Обновление comboBox после добавления нового работодателя
+            self.fill_employer_combobox(new_employer_id)
+            self.showCombo()
         else:
             msg = QtWidgets.QMessageBox()
             msg.setWindowTitle("Предупреждение")
@@ -2455,10 +2443,9 @@ class Ui_EditVacWindow(object):
             msg.addButton(QtWidgets.QMessageBox.Ok)
             msg.exec_()
 
-
     def saveVacancyData(self, vacancy_id, selected_employer_id, EditVacWindow):
         if (self.VacTitleEdit.text() and self.SalaryEdit.text() and self.ExperienceEdit.text() and 
-            self.AdressEdit.text() and self.Level_educationEdit.text() and self.skillsEdit.text()):
+            self.AdressEdit.text() and self.Level_educationEdit.text() and self.skillsEdit.text() and self.comboBox.currentText()):
             # Getting the user-entered data
             vacancy_title = self.VacTitleEdit.text()
             salary = self.SalaryEdit.text()
@@ -2466,26 +2453,20 @@ class Ui_EditVacWindow(object):
             address = self.AdressEdit.text()
             education_level = self.Level_educationEdit.text()
             skills = self.skillsEdit.text()
-            status = self.Status.currentText()  # Get the selected status from the combo box
-
+            status = self.Status.currentText()
             cursor = connection.cursor()
-
-            # Creating SQL query to update data in the "Vacancy" table
-            sql_query = "UPDATE Vacancy SET title = %s, salary = %s, experience = %s, adress = %s, education = %s, skills = %s, status = %s, employer = %s WHERE id = %s"
-            cursor.execute(sql_query, (vacancy_title, salary, experience, address, education_level, skills, status,selected_employer_id, vacancy_id))
-
-            # Executing the query to update the record
-            connection.commit()
-
-            self.BackToMainWindow(EditVacWindow)
+            employer_id = int(self.comboBox.currentText().split()[0]) 
+            if selected_employer_id is not None:
+                sql_query = "UPDATE Vacancy SET title = %s, salary = %s, experience = %s, adress = %s, education = %s, skills = %s, status = %s, employer = %s WHERE id = %s"
+                cursor.execute(sql_query, (vacancy_title, salary, experience, address, education_level, skills, status, employer_id, vacancy_id))
+                connection.commit()
+                self.BackToMainWindow(EditVacWindow)
         else:
             msg = QtWidgets.QMessageBox()
             msg.setWindowTitle("Внимание!")
             msg.setText("Заполните все поля для ввода")
             msg.addButton(QtWidgets.QMessageBox.Ok)
             msg.exec_()
-
-
 
     def clearFields(self):
         self.RabotNameEdit.setText("")  # Сбросить текст в поле для наименования
@@ -3632,6 +3613,7 @@ class Ui_edit_anketa_soiscWindow(object):
             self.lineEdit_4.setText(applicant_data['telephone'])
             self.lineEdit_5.setText(applicant_data['mail'])
             self.lineEdit_6.setText(applicant_data['city'])
+            self.lineEdit_7.setText(applicant_data['skills'])
 
         self.loadingButton.clicked.connect(lambda: self.click_on_loadingButton(edit_anketa_soiscWindow, applicant_id))
 
@@ -3737,7 +3719,6 @@ class Ui_edit_anketa_soiscWindow(object):
         _translate = QtCore.QCoreApplication.translate
         edit_anketa_soiscWindow.setWindowTitle(_translate("edit_anketa_soiscWindow", "Редактирование анкеты соискателя"))
         self.ExitButton.setText(_translate("edit_anketa_soiscWindow", "Отменить заполение и выйти"))
-        self.label_2.setText(_translate("edit_anketa_soiscWindow", "Прикрепить резюме"))
         self.label.setText(_translate("edit_anketa_soiscWindow", "Редактирование анкеты соискателя"))
         self.label_4.setText(_translate("edit_anketa_soiscWindow", "Опыт работы"))
         self.NoExpButton.setText(_translate("edit_anketa_soiscWindow", "Нет опыта"))
@@ -3944,7 +3925,7 @@ class Ui_RecKandidate(object):
 
         row = selected_indexes[0].row()
         candidate_id = self.tableSois.model().data(self.tableSois.model().index(row, 0))
-        with open('account.txt', 'r') as file:
+        with open('Pictures/account.txt', 'r') as file:
             id_officer = file.read()  
 
         insert_query = "INSERT INTO Candidate (id_app, id_vac, id_user) VALUES (%s, %s, %s)"
